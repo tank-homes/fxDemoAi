@@ -36,7 +36,6 @@ fastApiStudy/
 ### 1. リポジトリのクローン
 
 git clone https://github.com/tank-homes/fxDemoAi
-cd fx-autotrade-simulator
 
 
 ### 2. 仮想環境の作成（任意）
