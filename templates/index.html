@@ -81,7 +81,14 @@ let labels = [];
 function startTrade() {
     if (ws) ws.close();
 
-    ws = new WebSocket("ws://" + location.host + "/ws/auto_trade");
+    let wsUrl;
+    if (location.protocol === "https:") {
+        wsUrl = "wss://" + location.host + "/ws/auto_trade";
+    } else {
+        wsUrl = "ws://" + location.host + "/ws/auto_trade";
+    }
+
+    ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
         ws.send(JSON.stringify({
