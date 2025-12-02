@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 import pandas as pd
 import yfinance as yf
 from sklearn.ensemble import RandomForestRegressor
@@ -10,9 +11,10 @@ from datetime import datetime
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# ------------------------
-# データ取得・特徴量作成
-# ------------------------
+# 静的ファイル配信
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# データ取得
 def fetch_data(pair, period='1d', interval='1m'):
     df = yf.download(pair, period=period, interval=interval, progress=False)
     return df
@@ -28,39 +30,31 @@ def prepare_features(data):
     y = data['Close']
     return X, y
 
-# ------------------------
 # Webページ
-# ------------------------
 @app.get("/")
 def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-# ------------------------
-# WebSocketでリアルタイム売買
-# ------------------------
+# WebSocket
 @app.websocket("/ws/auto_trade")
 async def websocket_auto_trade(ws: WebSocket):
     await ws.accept()
     msg = await ws.receive_json()
-    
     pair = msg.get("pair", "GBPJPY=X")
-    leverage = float(msg.get("leverage", 1))
     balance = float(msg.get("initial_balance", 10000))
     buy_threshold = float(msg.get("buy_threshold", 1.01))
     sell_threshold = float(msg.get("sell_threshold", 0.99))
-    
-    duration_seconds = 180  # 3分間
+    duration_seconds = 180
     end_time = pd.Timestamp.now() + pd.Timedelta(seconds=duration_seconds)
 
-    # データ取得とモデル訓練
     data = fetch_data(pair)
     if data.empty:
         await ws.send_json({"error": "データ取得失敗"})
         return
+
     X, y = prepare_features(data)
     model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
     model.fit(X, y)
-
     position = 0
 
     while pd.Timestamp.now() < end_time:
@@ -72,11 +66,8 @@ async def websocket_auto_trade(ws: WebSocket):
         X_latest, _ = prepare_features(latest_data)
         latest_features = X_latest.iloc[-1:].values
         current_price = float(latest_data['Close'].iloc[-1])
+        predicted_price = model.predict(latest_features)[0] * 1.002
 
-        predicted_price = model.predict(latest_features)[0]
-        predicted_price *= 1.002  # 積極的に補正
-
-        # 売買判定
         action = "hold"
         if predicted_price > current_price * buy_threshold and balance > 0:
             position += balance / current_price
@@ -87,7 +78,7 @@ async def websocket_auto_trade(ws: WebSocket):
             position = 0
             action = "sell"
 
-        total_assets = balance + position * current_price  # 総資産を計算
+        total_assets = balance + position * current_price
 
         await ws.send_json({
             "time": datetime.now().strftime("%H:%M:%S"),
@@ -96,6 +87,6 @@ async def websocket_auto_trade(ws: WebSocket):
             "action": action,
             "balance": balance,
             "position": position,
-            "total_assets": total_assets  # ここを追加
+            "total_assets": total_assets
         })
         await asyncio.sleep(5)
