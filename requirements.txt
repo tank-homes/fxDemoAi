@@ -1,5 +1,8 @@
 fastapi
 uvicorn
+pandas
+numpy
+yfinance
+scikit-learn
 jinja2
 python-multipart
-sqlalchemy
