@@ -1,16 +1,155 @@
-{% extends "layout.html" %}
-{% block content %}
-<br>
-<div class="row">
-    <div class="col-md-10">
-        <h1>Welcome to Simple toDo application</h1>
-    </div>
-    <div class="col-md-2">
-        <a href="/admin" class="btn btn-primary">Login</a>
-    </div>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>FX 自動売買デモ</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #control-panel {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            width: 420px;
+            background: #f7f7f7;
+        }
+        table { 
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        td, th {
+            border: 1px solid #aaa;
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+
+<h2>FX 自動売買（3分間）</h2>
+
+<!-- ▼コントロールパネル -->
+<div id="control-panel">
+    <label>通貨ペア（例：USDJPY=X, GBPJPY=X）<br>
+        <input type="text" id="pair" value="GBPJPY=X">
+    </label><br><br>
+
+    <label>初期残高<br>
+        <input type="number" id="initial_balance" value="10000">
+    </label><br><br>
+
+    <label>買い閾値（予測価格 ÷ 現在価格）<br>
+        <input type="number" step="0.001" id="buy_threshold" value="1.002">
+    </label><br><br>
+
+    <label>売り閾値（予測価格 ÷ 現在価格）<br>
+        <input type="number" step="0.001" id="sell_threshold" value="0.998">
+    </label><br><br>
+
+    <button onclick="startTrade()">自動売買スタート</button>
 </div>
- 
-<hr>
-<p>This is a simple toDo application powered by <b>FastAPI</b>!</p>
- 
-{% endblock %}
+
+<!-- ▼価格グラフ -->
+<canvas id="priceChart" width="900" height="400"></canvas>
+
+<!-- ▼データ表示テーブル -->
+<h3>取引ログ</h3>
+
+<table>
+    <tr>
+        <th>時間</th>
+        <th>価格</th>
+        <th>予測</th>
+        <th>アクション</th>
+        <th>残高</th>
+        <th>ポジション</th>
+        <th>総資産</th>
+    </tr>
+    <tbody id="trade-log"></tbody>
+</table>
+
+
+<script>
+let ws;
+let priceChart;
+let priceData = [];
+let labels = [];
+
+function startTrade() {
+    if (ws) ws.close();
+
+    ws = new WebSocket("ws://" + location.host + "/ws/auto_trade");
+
+    ws.onopen = () => {
+        ws.send(JSON.stringify({
+            pair: document.getElementById("pair").value,
+            initial_balance: document.getElementById("initial_balance").value,
+            buy_threshold: document.getElementById("buy_threshold").value,
+            sell_threshold: document.getElementById("sell_threshold").value
+        }));
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        // ▼グラフ更新
+        labels.push(data.time);
+        priceData.push(data.price);
+        if (labels.length > 50) {
+            labels.shift();
+            priceData.shift();
+        }
+        priceChart.update();
+
+        // ▼テーブル追加
+        const row = `
+            <tr>
+                <td>${data.time}</td>
+                <td>${data.price.toFixed(3)}</td>
+                <td>${data.predicted.toFixed(3)}</td>
+                <td>${data.action}</td>
+                <td>${data.balance.toFixed(2)}</td>
+                <td>${data.position.toFixed(4)}</td>
+                <td>${data.total_assets.toFixed(2)}</td>
+            </tr>
+        `;
+        document.getElementById("trade-log").insertAdjacentHTML("afterbegin", row);
+    };
+
+    // ▼グラフ初期化
+    initChart();
+}
+
+function initChart() {
+    const ctx = document.getElementById("priceChart").getContext("2d");
+
+    priceChart = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "価格",
+                data: priceData,
+                borderWidth: 2,
+                fill: false
+            }]
+        },
+        options: {
+            animation: false,
+            scales: {
+                y: { beginAtZero: false }
+            }
+        }
+    });
+}
+</script>
+
+</body>
+</html>
