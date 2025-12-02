@@ -35,7 +35,7 @@ fastApiStudy/
 
 ### 1. リポジトリのクローン
 
-git clone https://github.com/あなたの名前/fx-autotrade-simulator.git
+git clone https://github.com/tank-homes/fxDemoAi
 cd fx-autotrade-simulator
 
 
